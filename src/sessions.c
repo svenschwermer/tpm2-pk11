@@ -43,20 +43,16 @@ int session_init(struct session* session, struct config *config) {
   size_t size = 0;
   TSS2_TCTI_CONTEXT *tcti_ctx = NULL;
   TSS2_RC rc;
-  TCTI_SOCKET_CONF socket_conf = {
-    .hostname = config->hostname != NULL ? config->hostname : DEFAULT_HOSTNAME,
-    .port = config->port > 0 ? config->port : DEFAULT_PORT,
-  };
 
   switch(config->type) {
 #ifdef TCTI_SOCKET_ENABLED
     case TPM_TYPE_SOCKET:
-      rc = InitSocketTcti(NULL, &size, &socket_conf, 0);
+      rc = Tss2_Tcti_Socket_Init(NULL, &size, NULL);
       break;
 #endif // TCTI_SOCKET_ENABLED
 #ifdef TCTI_DEVICE_ENABLED
     case TPM_TYPE_DEVICE:
-      rc = InitDeviceTcti(NULL, &size, 0);
+      rc = Tss2_Tcti_Device_Init(NULL, &size, NULL);
       break;
 #endif // TCTI_DEVICE_ENABLED
 #ifdef TCTI_TABRMD_ENABLED
@@ -78,16 +74,23 @@ int session_init(struct session* session, struct config *config) {
 
   switch(config->type) {
 #ifdef TCTI_SOCKET_ENABLED
-    case TPM_TYPE_SOCKET:
-      rc = InitSocketTcti(tcti_ctx, &size, &socket_conf, 0);
+    case TPM_TYPE_SOCKET: {
+      const char *hostname = config->hostname != NULL ? config->hostname : DEFAULT_HOSTNAME;
+      unsigned int port = config->port > 0 ? config->port : DEFAULT_PORT;
+      size_t buffer_len = strlen(hostname) + 20;
+      const char *conf = calloc(1, buffer_len);
+      if (conf == NULL)
+        goto cleanup;
+      snprintf(conf, buffer_len, "tcp://%s:%u", hostname, port);
+      rc = Tss2_Tcti_Socket_Init(tcti_ctx, &size, conf);
+      free(conf);
       break;
+    }
 #endif // TCTI_SOCKET_ENABLED
 #ifdef TCTI_DEVICE_ENABLED
     case TPM_TYPE_DEVICE: {
-      TCTI_DEVICE_CONF conf = {
-        .device_path = config->device != NULL ? config->device : DEFAULT_DEVICE,
-      };
-      rc = InitDeviceTcti(tcti_ctx, &size, &conf);
+      const char *conf = config->device != NULL ? config->device : DEFAULT_DEVICE;
+      rc = Tss2_Tcti_Device_Init(tcti_ctx, &size, conf);
       break;
     }
 #endif // TCTI_DEVICE_ENABLED
